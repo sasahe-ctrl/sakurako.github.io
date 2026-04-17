@@ -1551,6 +1551,159 @@ function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor
 const app=document.getElementById('app');
 const navEl=document.getElementById('nav');
 
+// === 每日学习反馈 ===
+function getTodayKey(){
+  const d=new Date();
+  return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+}
+
+function recordActivity(type, score, total){
+  const key=getTodayKey();
+  const raw=localStorage.getItem('ipsle_daily')||'{}';
+  const data=JSON.parse(raw);
+  if(!data[key]) data[key]={date:key,vocab:0,gram:0,flash:0,scores:[],streak:0};
+  if(type==='vocab') data[key].vocab++;
+  if(type==='gram') data[key].gram++;
+  if(type==='flash') data[key].flash+=score;
+  if(score!==undefined) data[key].scores.push({type,score,total,time:Date.now()});
+  // streak
+  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const yk=yesterday.getFullYear()+'-'+(yesterday.getMonth()+1)+'-'+yesterday.getDate();
+  const allKeys=Object.keys(data).sort();
+  if(data[yk] || key===allKeys[allKeys.length-1]){
+    data[key].streak=(data[yk]?data[yk].streak||0:0)+1;
+  }
+  localStorage.setItem('ipsle_daily',JSON.stringify(data));
+  return data[key];
+}
+
+function getDailyStats(){
+  const key=getTodayKey();
+  const raw=localStorage.getItem('ipsle_daily')||'{}';
+  const data=JSON.parse(raw);
+  return data[key]||{date:key,vocab:0,gram:0,flash:0,scores:[],streak:0};
+}
+
+function getWeekStats(){
+  const raw=localStorage.getItem('ipsle_daily')||'{}';
+  const data=JSON.parse(raw);
+  const result=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    const day=data[k]||{date:k,vocab:0,gram:0,flash:0,scores:[]};
+    const dayScores=day.scores||[];
+    const avg=dayScores.length?Math.round(dayScores.reduce((a,s)=>a+s.score/s.total*100,0)/dayScores.length):0;
+    result.push({
+      label:['日','一','二','三','四','五','六'][d.getDay()],
+      active:dayScores.length>0,
+      avg,
+      sessions:dayScores.length
+    });
+  }
+  return result;
+}
+
+function rFeedback(){
+  renderNav();
+  const today=getDailyStats();
+  const week=getWeekStats();
+  const scores=today.scores||[];
+  const avgScore=scores.length?Math.round(scores.reduce((a,s)=>a+s.score/s.total*100,0)/scores.length):0;
+  const totalSessions=today.vocab+today.gram;
+
+  // Determine emoji and message
+  let emoji='🌱', msg='今天还没有开始学习', sub='点击下方开始第一课吧！';
+  if(totalSessions>=1 && avgScore<60){emoji='💪';msg='继续加油！';sub='多练几次，分数会越来越高的。';}
+  else if(totalSessions>=1 && avgScore<80){emoji='⭐';msg='表现不错！';sub='再接再厉，冲击满分！';}
+  else if(totalSessions>=1 && avgScore>=80){emoji='🏆';msg='今天表现出色！';sub='优秀！保持这个状态。';}
+  if(today.flash>0 && totalSessions===0){emoji='📖';msg='已经记了单词！';sub='要不要做一套测验？';}
+
+  // Bar chart max
+  const maxSessions=Math.max(...week.map(d=>d.sessions),1);
+
+  app.innerHTML=`
+  <div style="font-size:20px;font-weight:800;color:#1f2937;margin-bottom:4px">今日学习报告</div>
+  <div style="font-size:12px;color:#afafaf;font-weight:600;margin-bottom:14px">${getTodayKey()}</div>
+
+  <div class="card" style="text-align:center;padding:20px 16px;margin-bottom:12px">
+    <div style="font-size:48px;margin-bottom:8px">${emoji}</div>
+    <div style="font-size:18px;font-weight:800;color:#1f2937;margin-bottom:4px">${msg}</div>
+    <div style="font-size:13px;color:#6b7280;font-weight:600">${sub}</div>
+  </div>
+
+  <div class="sg" style="margin-bottom:12px">
+    <div class="sc">
+      <div class="ring-num" style="font-size:22px;font-weight:800;color:var(--green)">${totalSessions}</div>
+      <div class="sl">练习次数</div>
+    </div>
+    <div class="sc">
+      <div class="ring-num" style="font-size:22px;font-weight:800;color:var(--blue)">${today.flash}</div>
+      <div class="sl">单词已学</div>
+    </div>
+    <div class="sc">
+      <div class="ring-num" style="font-size:22px;font-weight:800;color:${avgScore>=80?'var(--green)':avgScore>=60?'#ff9800':'#f44336'}">${scores.length?avgScore+'%':'--'}</div>
+      <div class="sl">平均正确率</div>
+    </div>
+  </div>
+
+  ${scores.length?`
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec">今日测验记录</div>
+    ${scores.map(s=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:2px solid #f3f4f6;font-size:13px">
+      <span style="font-weight:600;color:#374151">${s.type==='vocab'?'词汇测验':'语法练习'}</span>
+      <span style="font-weight:800;padding:3px 10px;border-radius:20px;background:${Math.round(s.score/s.total*100)>=80?'#e8f5e9':Math.round(s.score/s.total*100)>=60?'#fff8e1':'#ffebee'};color:${Math.round(s.score/s.total*100)>=80?'#2e7d32':Math.round(s.score/s.total*100)>=60?'#f57f17':'#b71c1c'}">${s.score}/${s.total} · ${Math.round(s.score/s.total*100)}%</span>
+    </div>`).join('')}
+  </div>`:
+  `<div class="card" style="margin-bottom:12px;text-align:center;padding:20px">
+    <div style="font-size:13px;color:#afafaf;font-weight:600">今天还没有测验记录</div>
+    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn btn-green" style="width:100%;font-size:13px" onclick="go('quiz')">词汇测验</button>
+      <button class="btn btn-blue" style="width:100%;font-size:13px" onclick="go('gram')">语法练习</button>
+    </div>
+  </div>`}
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec">本周学习记录</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;height:80px;padding:0 4px">
+      ${week.map(d=>`
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">
+        <div style="width:100%;max-width:28px;background:${d.active?'var(--green)':'#e0e0e0'};border-radius:6px 6px 0 0;
+          height:${d.sessions?Math.max(12,Math.round(d.sessions/maxSessions*60)):4}px;transition:height 0.3s"></div>
+        <div style="font-size:10px;font-weight:700;color:${d.active?'var(--green-dark)':'var(--text3)'}">${d.label}</div>
+      </div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:#afafaf;text-align:center;margin-top:6px;font-weight:600">每格代表当天练习次数</div>
+  </div>
+
+  ${totalSessions>0?'':
+  `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <button class="feat-card fc-purple" onclick="go('flash')">
+      <div style="font-size:24px;margin-bottom:6px">▣</div>
+      <div style="font-size:13px;font-weight:800;color:#4c1d95">单词卡</div>
+    </button>
+    <button class="feat-card fc-teal" onclick="go('quiz')">
+      <div style="font-size:24px;margin-bottom:6px">◈</div>
+      <div style="font-size:13px;font-weight:800;color:#14532d">词汇测验</div>
+    </button>
+  </div>`}
+  `;
+}
+
+
+
+// Header scroll behaviour
+let _lastScroll=0;
+window.addEventListener('scroll',()=>{
+  const hbar=document.getElementById('hbar');
+  if(!hbar)return;
+  const cur=window.scrollY;
+  if(cur>_lastScroll && cur>60) hbar.classList.add('hidden');
+  else hbar.classList.remove('hidden');
+  _lastScroll=cur;
+},{passive:true});
+
 function renderNav(){
   const ts=[
     {id:'home',ic:'🐾',lb:'首页'},
@@ -1563,6 +1716,7 @@ function renderNav(){
   ];
   navEl.innerHTML=ts.map(t=>`<button class="nb ${S===t.id?'on':''}" onclick="go('${t.id}')" id="nav-${t.id}">${t.id==='home'?`<img src='data:image/png;base64,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' style='width:28px;height:28px;border-radius:50%;border:2px solid ${S==='home'?'#72B84A':'transparent'};transition:border 0.2s'>`:"<span style='font-size:17px'>"+t.ic+"</span>"}<span>${t.lb}</span><span class="nb-dot"></span></button>`).join('');
 }
+
 
 function rHome(){
   renderNav();
@@ -2063,158 +2217,7 @@ document.addEventListener('click', function(e){
 });
 
 
-// === 每日学习反馈 ===
-function getTodayKey(){
-  const d=new Date();
-  return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
-}
 
-function recordActivity(type, score, total){
-  const key=getTodayKey();
-  const raw=localStorage.getItem('ipsle_daily')||'{}';
-  const data=JSON.parse(raw);
-  if(!data[key]) data[key]={date:key,vocab:0,gram:0,flash:0,scores:[],streak:0};
-  if(type==='vocab') data[key].vocab++;
-  if(type==='gram') data[key].gram++;
-  if(type==='flash') data[key].flash+=score;
-  if(score!==undefined) data[key].scores.push({type,score,total,time:Date.now()});
-  // streak
-  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-  const yk=yesterday.getFullYear()+'-'+(yesterday.getMonth()+1)+'-'+yesterday.getDate();
-  const allKeys=Object.keys(data).sort();
-  if(data[yk] || key===allKeys[allKeys.length-1]){
-    data[key].streak=(data[yk]?data[yk].streak||0:0)+1;
-  }
-  localStorage.setItem('ipsle_daily',JSON.stringify(data));
-  return data[key];
-}
-
-function getDailyStats(){
-  const key=getTodayKey();
-  const raw=localStorage.getItem('ipsle_daily')||'{}';
-  const data=JSON.parse(raw);
-  return data[key]||{date:key,vocab:0,gram:0,flash:0,scores:[],streak:0};
-}
-
-function getWeekStats(){
-  const raw=localStorage.getItem('ipsle_daily')||'{}';
-  const data=JSON.parse(raw);
-  const result=[];
-  for(let i=6;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    const k=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
-    const day=data[k]||{date:k,vocab:0,gram:0,flash:0,scores:[]};
-    const dayScores=day.scores||[];
-    const avg=dayScores.length?Math.round(dayScores.reduce((a,s)=>a+s.score/s.total*100,0)/dayScores.length):0;
-    result.push({
-      label:['日','一','二','三','四','五','六'][d.getDay()],
-      active:dayScores.length>0,
-      avg,
-      sessions:dayScores.length
-    });
-  }
-  return result;
-}
-
-function rFeedback(){
-  renderNav();
-  const today=getDailyStats();
-  const week=getWeekStats();
-  const scores=today.scores||[];
-  const avgScore=scores.length?Math.round(scores.reduce((a,s)=>a+s.score/s.total*100,0)/scores.length):0;
-  const totalSessions=today.vocab+today.gram;
-
-  // Determine emoji and message
-  let emoji='🌱', msg='今天还没有开始学习', sub='点击下方开始第一课吧！';
-  if(totalSessions>=1 && avgScore<60){emoji='💪';msg='继续加油！';sub='多练几次，分数会越来越高的。';}
-  else if(totalSessions>=1 && avgScore<80){emoji='⭐';msg='表现不错！';sub='再接再厉，冲击满分！';}
-  else if(totalSessions>=1 && avgScore>=80){emoji='🏆';msg='今天表现出色！';sub='优秀！保持这个状态。';}
-  if(today.flash>0 && totalSessions===0){emoji='📖';msg='已经记了单词！';sub='要不要做一套测验？';}
-
-  // Bar chart max
-  const maxSessions=Math.max(...week.map(d=>d.sessions),1);
-
-  app.innerHTML=`
-  <div style="font-size:20px;font-weight:800;color:#1f2937;margin-bottom:4px">今日学习报告</div>
-  <div style="font-size:12px;color:#afafaf;font-weight:600;margin-bottom:14px">${getTodayKey()}</div>
-
-  <div class="card" style="text-align:center;padding:20px 16px;margin-bottom:12px">
-    <div style="font-size:48px;margin-bottom:8px">${emoji}</div>
-    <div style="font-size:18px;font-weight:800;color:#1f2937;margin-bottom:4px">${msg}</div>
-    <div style="font-size:13px;color:#6b7280;font-weight:600">${sub}</div>
-  </div>
-
-  <div class="sg" style="margin-bottom:12px">
-    <div class="sc">
-      <div class="ring-num" style="font-size:22px;font-weight:800;color:var(--green)">${totalSessions}</div>
-      <div class="sl">练习次数</div>
-    </div>
-    <div class="sc">
-      <div class="ring-num" style="font-size:22px;font-weight:800;color:var(--blue)">${today.flash}</div>
-      <div class="sl">单词已学</div>
-    </div>
-    <div class="sc">
-      <div class="ring-num" style="font-size:22px;font-weight:800;color:${avgScore>=80?'var(--green)':avgScore>=60?'#ff9800':'#f44336'}">${scores.length?avgScore+'%':'--'}</div>
-      <div class="sl">平均正确率</div>
-    </div>
-  </div>
-
-  ${scores.length?`
-  <div class="card" style="margin-bottom:12px">
-    <div class="sec">今日测验记录</div>
-    ${scores.map(s=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:2px solid #f3f4f6;font-size:13px">
-      <span style="font-weight:600;color:#374151">${s.type==='vocab'?'词汇测验':'语法练习'}</span>
-      <span style="font-weight:800;padding:3px 10px;border-radius:20px;background:${Math.round(s.score/s.total*100)>=80?'#e8f5e9':Math.round(s.score/s.total*100)>=60?'#fff8e1':'#ffebee'};color:${Math.round(s.score/s.total*100)>=80?'#2e7d32':Math.round(s.score/s.total*100)>=60?'#f57f17':'#b71c1c'}">${s.score}/${s.total} · ${Math.round(s.score/s.total*100)}%</span>
-    </div>`).join('')}
-  </div>`:
-  `<div class="card" style="margin-bottom:12px;text-align:center;padding:20px">
-    <div style="font-size:13px;color:#afafaf;font-weight:600">今天还没有测验记录</div>
-    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button class="btn btn-green" style="width:100%;font-size:13px" onclick="go('quiz')">词汇测验</button>
-      <button class="btn btn-blue" style="width:100%;font-size:13px" onclick="go('gram')">语法练习</button>
-    </div>
-  </div>`}
-
-  <div class="card" style="margin-bottom:12px">
-    <div class="sec">本周学习记录</div>
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;height:80px;padding:0 4px">
-      ${week.map(d=>`
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">
-        <div style="width:100%;max-width:28px;background:${d.active?'var(--green)':'#e0e0e0'};border-radius:6px 6px 0 0;
-          height:${d.sessions?Math.max(12,Math.round(d.sessions/maxSessions*60)):4}px;transition:height 0.3s"></div>
-        <div style="font-size:10px;font-weight:700;color:${d.active?'var(--green-dark)':'var(--text3)'}">${d.label}</div>
-      </div>`).join('')}
-    </div>
-    <div style="font-size:11px;color:#afafaf;text-align:center;margin-top:6px;font-weight:600">每格代表当天练习次数</div>
-  </div>
-
-  ${totalSessions>0?'':
-  `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-    <button class="feat-card fc-purple" onclick="go('flash')">
-      <div style="font-size:24px;margin-bottom:6px">▣</div>
-      <div style="font-size:13px;font-weight:800;color:#4c1d95">单词卡</div>
-    </button>
-    <button class="feat-card fc-teal" onclick="go('quiz')">
-      <div style="font-size:24px;margin-bottom:6px">◈</div>
-      <div style="font-size:13px;font-weight:800;color:#14532d">词汇测验</div>
-    </button>
-  </div>`}
-  `;
-}
-
-
-
-// Header scroll behaviour
-let _lastScroll=0;
-window.addEventListener('scroll',()=>{
-  const hbar=document.getElementById('hbar');
-  if(!hbar)return;
-  const cur=window.scrollY;
-  if(cur>_lastScroll && cur>60) hbar.classList.add('hidden');
-  else hbar.classList.remove('hidden');
-  _lastScroll=cur;
-},{passive:true});
 function bouncePanda(){
   const p=document.getElementById('hero-panda');
   if(!p)return;
