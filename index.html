@@ -1120,18 +1120,35 @@ function go(scr){
   else if(scr==='essay'){eIdx=-1;rEssay();}
 }
 
-// 增强版语音函数：支持单词和例句
+// --- 终极语音方案开始 ---
+
+// 1. 核心发音大脑
 function speak(text) {
     if(!text) return;
-    // 去掉文字前后的空格，并针对长句子进行编码
-    const cleanText = text.trim();
+    // 过滤掉中文和特殊符号，只读英文部分
+    let cleanText = text.replace(/[\u4e00-\u9fa5]/g, '').trim();
+    if(!cleanText) return;
+
     const audio = new Audio(`https://dict.youdao.com/dictvoice?type=1&audio=${encodeURIComponent(cleanText)}`);
-    
-    // 播放前先停止之前的声音，防止重叠
-    audio.play().catch(e => {
-        console.log("播放失败，请确保点击触发", e);
-    });
+    audio.play().catch(e => console.log("等待点击触发"));
 }
+
+// 2. 全自动“嘴巴”安装器
+// 无论你的例句出现在哪里，只要它在屏幕上，点它就能说话
+document.addEventListener('click', function(e) {
+    // 获取点击的对象
+    let target = e.target;
+    
+    // 如果点击的是例句所在的 div 或 p 标签，或者是 class 包含 snt 的元素
+    if (target.tagName === 'P' || target.className.includes('snt') || target.tagName === 'DIV') {
+        // 只有包含英文单词的才读，防止乱点乱读
+        if (/[a-zA-Z]/.test(target.innerText) && target.innerText.length > 1) {
+            speak(target.innerText);
+        }
+    }
+}, true);
+
+// --- 终极语音方案结束 ---
 
 function resetK(){if(confirm('确定重置所有掌握记录吗？')){sd.known=[];sv();rHome();}}
 
