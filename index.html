@@ -1119,6 +1119,14 @@ function go(scr){
   else if(scr==='write')rWrite();
   else if(scr==='essay'){eIdx=-1;rEssay();}
 }
+
+// 这是为你新加的语音朗读函数，微信兼容性最好
+function speak(word) {
+    if(!word) return;
+    const audio = new Audio(`https://dict.youdao.com/dictvoice?type=1&audio=${encodeURIComponent(word)}`);
+    audio.play().catch(e => console.log("微信环境需点击触发:", e));
+}
+
 function resetK(){if(confirm('确定重置所有掌握记录吗？')){sd.known=[];sv();rHome();}}
 
 ld();rHome();
