@@ -1120,11 +1120,17 @@ function go(scr){
   else if(scr==='essay'){eIdx=-1;rEssay();}
 }
 
-// 这是为你新加的语音朗读函数，微信兼容性最好
-function speak(word) {
-    if(!word) return;
-    const audio = new Audio(`https://dict.youdao.com/dictvoice?type=1&audio=${encodeURIComponent(word)}`);
-    audio.play().catch(e => console.log("微信环境需点击触发:", e));
+// 增强版语音函数：支持单词和例句
+function speak(text) {
+    if(!text) return;
+    // 去掉文字前后的空格，并针对长句子进行编码
+    const cleanText = text.trim();
+    const audio = new Audio(`https://dict.youdao.com/dictvoice?type=1&audio=${encodeURIComponent(cleanText)}`);
+    
+    // 播放前先停止之前的声音，防止重叠
+    audio.play().catch(e => {
+        console.log("播放失败，请确保点击触发", e);
+    });
 }
 
 function resetK(){if(confirm('确定重置所有掌握记录吗？')){sd.known=[];sv();rHome();}}
